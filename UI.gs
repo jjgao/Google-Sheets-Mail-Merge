@@ -83,19 +83,23 @@ function saveConfigFromDialog(data) {
 }
 
 /**
- * Create a sample data sheet with dummy records for testing.
- * Inserts a new sheet named "Sample Data" (or activates it if it exists).
+ * Full end-to-end sample setup:
+ *   1. Create "Sample Data" sheet with 10 dummy records
+ *   2. Create Config sheet and default Templates/Output Drive folders
+ *   3. Create a sample label template Doc in the Templates folder
+ *   4. Save template ID and output folder ID to config
+ *   5. Run the mail merge and show the output link
  */
 function createSampleDataUI() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+
+  ss.toast('Setting up sample data…', 'Mail Merge', -1);
+
+  // ── Step 1: Sample data sheet ────────────────────────────────────────────
   const sheetName = 'Sample Data';
   let sheet = ss.getSheetByName(sheetName);
-
-  if (sheet) {
-    ss.setActiveSheet(sheet);
-  } else {
-    sheet = ss.insertSheet(sheetName);
-  }
+  if (!sheet) sheet = ss.insertSheet(sheetName);
 
   const headers = ['First Name', 'Last Name', 'Title', 'Organization', 'City'];
   const rows = [
@@ -116,13 +120,51 @@ function createSampleDataUI() {
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285f4').setFontColor('#ffffff');
   sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   sheet.setFrozenRows(1);
-
-  for (let i = 0; i < headers.length; i++) {
-    sheet.autoResizeColumn(i + 1);
-  }
-
+  for (let i = 0; i < headers.length; i++) sheet.autoResizeColumn(i + 1);
   ss.setActiveSheet(sheet);
-  ss.toast('Sample data created in "' + sheetName + '" sheet.', 'Mail Merge', 5);
+
+  // ── Step 2: Config sheet + default folders ───────────────────────────────
+  getConfigSheet();
+  const folders = applyDefaultFolders();
+  const outputFolderId = getConfig(CONFIG_KEYS.OUTPUT_FOLDER_ID);
+
+  // ── Step 3: Create sample template Doc ───────────────────────────────────
+  const templateDoc = DocumentApp.create('Label Template - Sample');
+  const body = templateDoc.getBody();
+
+  // Remove the default empty paragraph, then add a single-cell table
+  // whose content serves as the label design.
+  body.clear();
+  const labelContent = '{{First Name}} {{Last Name}}\n{{Title}}\n{{Organization}}\n{{City}}';
+  body.appendTable([[labelContent]]);
+  templateDoc.saveAndClose();
+
+  // Move the template into the Templates folder
+  const parent = getSpreadsheetParentFolder();
+  const templatesFolder = getOrCreateSubfolder(parent, 'Templates');
+  DriveApp.getFileById(templateDoc.getId()).moveTo(templatesFolder);
+
+  // ── Step 4: Save config ───────────────────────────────────────────────────
+  setConfig(CONFIG_KEYS.TEMPLATE_DOC_ID, templateDoc.getId());
+
+  // ── Step 5: Run the merge ─────────────────────────────────────────────────
+  ss.toast('Generating output…', 'Mail Merge', -1);
+  const records = getRows(sheet);
+  const outputUrl = generateDocument(records, templateDoc.getId(), outputFolderId);
+
+  ss.toast('Done!', 'Mail Merge', 5);
+  ui.alert(
+    'Sample setup complete',
+    'All steps completed successfully:\n\n' +
+    '✓ "Sample Data" sheet created (10 records)\n' +
+    '✓ Config sheet created\n' +
+    '✓ Templates folder: ' + folders.templatesUrl + '\n' +
+    '✓ Output folder: ' + folders.outputUrl + '\n' +
+    '✓ Sample template Doc created\n' +
+    '✓ Mail merge output generated\n\n' +
+    'Output file:\n' + outputUrl,
+    ui.ButtonSet.OK
+  );
 }
 
 /**
