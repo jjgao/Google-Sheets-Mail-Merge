@@ -1,7 +1,7 @@
 # Only .gs files and appsscript.json should be pushed to Google Apps Script
 
 # Test infrastructure
-__tests__/
+__tests__/**
 jest.config.js
 jest.gastransform.js
 jest.setup.js
