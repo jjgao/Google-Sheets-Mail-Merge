@@ -130,6 +130,51 @@ function validateConfig() {
 }
 
 /**
+ * Get the parent Drive folder of the active spreadsheet.
+ * @returns {GoogleAppsScript.Drive.Folder}
+ */
+function getSpreadsheetParentFolder() {
+  const file = DriveApp.getFileById(SpreadsheetApp.getActiveSpreadsheet().getId());
+  return file.getParents().next();
+}
+
+/**
+ * Get a named subfolder within a parent folder, creating it if it doesn't exist.
+ * @param {GoogleAppsScript.Drive.Folder} parentFolder
+ * @param {string} name
+ * @returns {GoogleAppsScript.Drive.Folder}
+ */
+function getOrCreateSubfolder(parentFolder, name) {
+  const existing = parentFolder.getFoldersByName(name);
+  if (existing.hasNext()) {
+    return existing.next();
+  }
+  return parentFolder.createFolder(name);
+}
+
+/**
+ * Create default "Templates" and "Output" folders under the spreadsheet's
+ * parent folder (if they don't already exist), and save the Output folder ID
+ * to config.
+ * @returns {{ templatesUrl: string, outputUrl: string }}
+ */
+function applyDefaultFolders() {
+  const parent = getSpreadsheetParentFolder();
+  const templatesFolder = getOrCreateSubfolder(parent, 'Templates');
+  const outputFolder = getOrCreateSubfolder(parent, 'Output');
+
+  // Only set OUTPUT_FOLDER_ID if it's not already configured
+  if (!getConfig(CONFIG_KEYS.OUTPUT_FOLDER_ID)) {
+    setConfig(CONFIG_KEYS.OUTPUT_FOLDER_ID, outputFolder.getId());
+  }
+
+  return {
+    templatesUrl: templatesFolder.getUrl(),
+    outputUrl: outputFolder.getUrl(),
+  };
+}
+
+/**
  * Get or create the Config sheet.
  * @returns {GoogleAppsScript.Spreadsheet.Sheet}
  */

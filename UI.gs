@@ -8,11 +8,17 @@
  * Called automatically when the spreadsheet is opened.
  */
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Mail Merge')
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Mail Merge')
     .addItem('Configure…', 'showConfigDialogUI')
     .addSeparator()
     .addItem('Generate', 'runGenerateUI')
+    .addSeparator()
+    .addSubMenu(
+      ui.createMenu('Testing')
+        .addItem('Create sample data', 'createSampleDataUI')
+        .addItem('Run system test', 'runSystemTestUI')
+    )
     .addToUi();
 }
 
@@ -74,6 +80,108 @@ function saveConfigFromDialog(data) {
       setConfig(key, data[key]);
     }
   }
+}
+
+/**
+ * Create a sample data sheet with dummy records for testing.
+ * Inserts a new sheet named "Sample Data" (or activates it if it exists).
+ */
+function createSampleDataUI() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetName = 'Sample Data';
+  let sheet = ss.getSheetByName(sheetName);
+
+  if (sheet) {
+    ss.setActiveSheet(sheet);
+  } else {
+    sheet = ss.insertSheet(sheetName);
+  }
+
+  const headers = ['First Name', 'Last Name', 'Title', 'Organization', 'City'];
+  const rows = [
+    ['Alice', 'Johnson', 'Director', 'Acme Corp', 'New York'],
+    ['Bob', 'Smith', 'Engineer', 'Globex', 'San Francisco'],
+    ['Carol', 'Williams', 'Manager', 'Initech', 'Austin'],
+    ['David', 'Brown', 'Designer', 'Umbrella', 'Seattle'],
+    ['Eva', 'Davis', 'Analyst', 'Stark Industries', 'Chicago'],
+    ['Frank', 'Miller', 'VP', 'Wayne Enterprises', 'Boston'],
+    ['Grace', 'Wilson', 'Lead', 'Cyberdyne', 'Denver'],
+    ['Henry', 'Moore', 'Architect', 'Tyrell Corp', 'Portland'],
+    ['Iris', 'Taylor', 'Producer', 'Oscorp', 'Miami'],
+    ['Jack', 'Anderson', 'Consultant', 'Soylent Corp', 'Dallas'],
+  ];
+
+  sheet.clearContents();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285f4').setFontColor('#ffffff');
+  sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  sheet.setFrozenRows(1);
+
+  for (let i = 0; i < headers.length; i++) {
+    sheet.autoResizeColumn(i + 1);
+  }
+
+  ss.setActiveSheet(sheet);
+  ss.toast('Sample data created in "' + sheetName + '" sheet.', 'Mail Merge', 5);
+}
+
+/**
+ * Run a system test: checks config, folder access, and template access.
+ * Shows a summary dialog with pass/fail results.
+ */
+function runSystemTestUI() {
+  const ui = SpreadsheetApp.getUi();
+  const results = [];
+
+  // Test 1: Config sheet exists
+  const configSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Config');
+  results.push({ name: 'Config sheet exists', pass: !!configSheet });
+
+  // Test 2: Output folder configured
+  const outputFolderId = getConfig(CONFIG_KEYS.OUTPUT_FOLDER_ID);
+  results.push({ name: 'Output folder configured', pass: !!outputFolderId });
+
+  // Test 3: Output folder accessible
+  if (outputFolderId) {
+    try {
+      DriveApp.getFolderById(outputFolderId);
+      results.push({ name: 'Output folder accessible', pass: true });
+    } catch (e) {
+      results.push({ name: 'Output folder accessible', pass: false, detail: e.message });
+    }
+  } else {
+    results.push({ name: 'Output folder accessible', pass: false, detail: 'Not configured' });
+  }
+
+  // Test 4: At least one template configured
+  const docId = getConfig(CONFIG_KEYS.TEMPLATE_DOC_ID);
+  const slidesId = getConfig(CONFIG_KEYS.TEMPLATE_SLIDES_ID);
+  results.push({ name: 'Template configured', pass: !!(docId || slidesId) });
+
+  // Test 5: Template accessible (whichever is configured)
+  const templateId = docId || slidesId;
+  if (templateId) {
+    try {
+      DriveApp.getFileById(templateId);
+      results.push({ name: 'Template file accessible', pass: true });
+    } catch (e) {
+      results.push({ name: 'Template file accessible', pass: false, detail: e.message });
+    }
+  } else {
+    results.push({ name: 'Template file accessible', pass: false, detail: 'Not configured' });
+  }
+
+  // Test 6: Active sheet has data rows
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const hasData = sheet.getLastRow() >= 2 && sheet.getLastColumn() >= 1;
+  results.push({ name: 'Active sheet has data', pass: hasData });
+
+  // Build summary
+  const passed = results.filter(r => r.pass).length;
+  const lines = results.map(r => (r.pass ? '✓' : '✗') + ' ' + r.name + (r.detail ? ' (' + r.detail + ')' : ''));
+  const summary = passed + '/' + results.length + ' checks passed\n\n' + lines.join('\n');
+
+  ui.alert('System Test Results', summary, ui.ButtonSet.OK);
 }
 
 /**
